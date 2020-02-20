@@ -1,5 +1,5 @@
-nextpresso1.9.2.4
+# nextpresso1.9.2.5
 
-A pipeline for RNA-seq data analysis
+A pipeline for BULK RNA-seq data analysis
 
 
