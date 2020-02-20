@@ -20,8 +20,9 @@
 #
 #			  Updated FastQC to the last version (fastqc_v0.11.7)
 # v1.9.2.4	mar2019 - FastQScreen updated, DESeq2 PCA now uses rlog
+# v1.9.2.5	jan2020 - Added only_DESeq2 for the background and flat pattern filtering (does not do HTseqcount again)
 
-my $version="v1.9.2.4, mar2019";
+my $version="v1.9.2.5, jan2020";
 
 
 use strict;
@@ -420,7 +421,7 @@ sub main(){
 				my $command="ln -s ".$originalAlignmentsDir." ".$new_workspace;
 				system($command);
 
-				ExecutionLevels::level_6($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqCountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$reducedGTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,$new_workspace,$experimentName,$logfh,
+				ExecutionLevels::only_DESeq2($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqCountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$reducedGTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,$new_workspace,$experimentName,$logfh,
 				$executionCreatedTempDir,$queueSystem,$queueName,$multicore,$queueProject);			
 
 			}else{ # when having spikes, it is more appropriate to not consider them for htseqcount as they could affect
@@ -441,7 +442,7 @@ sub main(){
 				my $command="ln -s ".$originalAlignmentsDir." ".$new_workspace;
 				system($command);
 
-				ExecutionLevels::level_6($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqCountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$reducedGTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,$new_workspace,$experimentName,$logfh,
+				ExecutionLevels::only_DESeq2($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqCountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$reducedGTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,$new_workspace,$experimentName,$logfh,
 				$executionCreatedTempDir,$queueSystem,$queueName,$multicore,$queueProject);
 			}
 			
@@ -461,7 +462,7 @@ sub main(){
 				my $command="ln -s ".$originalAlignmentsDir." ".$new_workspace;
 				system($command);
 
-				ExecutionLevels::level_6($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqCountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$reducedGTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,$new_workspace,$experimentName,$logfh,
+				ExecutionLevels::only_DESeq2($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqCountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$reducedGTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,$new_workspace,$experimentName,$logfh,
 				$executionCreatedTempDir,$queueSystem,$queueName,$multicore,$queueProject);			
 
 
@@ -481,7 +482,7 @@ sub main(){
 				my $command="ln -s ".$originalAlignmentsDir." ".$new_workspace;
 				system($command);
 
-				ExecutionLevels::level_6($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqCountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$reducedGTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,$new_workspace,$experimentName,$logfh,
+				ExecutionLevels::only_DESeq2($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqCountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$reducedGTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,$new_workspace,$experimentName,$logfh,
 				$executionCreatedTempDir,$queueSystem,$queueName,$multicore,$queueProject);
 
 			}		

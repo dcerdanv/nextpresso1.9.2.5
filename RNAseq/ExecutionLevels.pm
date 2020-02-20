@@ -16,7 +16,8 @@
 #			  When there are no flat pattern genes to filter out, the number of flat pattern genes is now written as '0'. In v1.9.2 this value was the result of 
 #			  doing 'wc -l ' of the number of lines of the file with the list of flat pattern filtered genes, but when no genes are filtered out due to this reason,
 #			  the expected file does not exist, and the 'wc -l ' command results in a bug, now solved this way.
-
+# v1.9.2.5	jan2020 - Added only_DESeq2 function, for the background and flat pattern filtering (does not do HTseqcount again).
+#			  A modification was done on 'removeBackgroundLevelGenesANDFlatPatternGenes_for_deseq_branch' too, for the same purpose. See the line '#**** new, added to this version of the pipeline'
 
 
 
@@ -2225,7 +2226,7 @@ sub removeBackgroundLevelGenesANDFlatPatternGenes_for_deseq_branch{
 			
 			my $nSamples=0;
 			
-			############ (1) Discards genes under background expression level ##################
+			########### (1) Discards genes under background expression level ##################
 			
 			foreach my $line(<IN>){
 				chomp($line);
@@ -2353,8 +2354,48 @@ sub removeBackgroundLevelGenesANDFlatPatternGenes_for_deseq_branch{
 						system($command);
 					}
 				}
-			}			
+				close(REDUCEDLIST);
+			}
 			
+			#**** new, added to this version of the pipeline
+			# Copies the previous input files for DESeq2 - *.txt - for all the required comparisons from the initial deseq folder
+			system("cp ".$deseqOutDir."*txt ".$backgroundFiltered_AND_flatPatternFiltered_DIR);
+			system("mkdir -p ".$backgroundFiltered_AND_flatPatternFiltered_DIR."deseq");
+			system("rm -rf ".$backgroundFiltered_AND_flatPatternFiltered_DIR."*differentialExpression.txt");
+			system("rm -rf ".$backgroundFiltered_AND_flatPatternFiltered_DIR."htseqCount_sorting_check.txt"); 
+			
+			#reads all the input txt files for DESeq2
+			my @TXTFILES=<$backgroundFiltered_AND_flatPatternFiltered_DIR*txt>;			
+			foreach my $txt(@TXTFILES){
+				chomp($txt);
+				
+				$txt=(split('/',$txt))[-1];
+				if($txt ne "background_level_removed_genes.txt" && $txt ne "filtering.log.txt"){
+				
+					#creates the header file of the new input file for DESeq2
+					system("head -n 1 ".$backgroundFiltered_AND_flatPatternFiltered_DIR.$txt." > ".$backgroundFiltered_AND_flatPatternFiltered_DIR."deseq/".$txt);
+					print "Filtering background and flat pattern genes in ".$backgroundFiltered_AND_flatPatternFiltered_DIR.$txt."\n";
+					if(open(REDUCEDLIST,"<",$outputFileWithoutFlatPatterns)){			
+						foreach my $line(<REDUCEDLIST>){
+							chomp($line);
+				
+							if($line!~ /^Name/){
+								my @tokens=split('\t',$line);
+								$tokens[0]=~ s/\"//g;
+												
+								my $command="grep '^".$tokens[0]."\t' ".$backgroundFiltered_AND_flatPatternFiltered_DIR.$txt." >> ".$backgroundFiltered_AND_flatPatternFiltered_DIR."deseq/".$txt;
+								system($command);
+							}
+						}
+						
+						close(REDUCEDLIST);					
+					}
+					
+					# removes those files copied from previous DESeq2 output
+					system("rm -f ".$backgroundFiltered_AND_flatPatternFiltered_DIR.$txt);
+				}				
+			}			
+
 		}#if(open(IN,"<",$inputFileForBackgroundFiltering))
 		else{
 			print $logfh (Miscellaneous->getCurrentDateAndTime())."\n[ERROR in removeBackgroundLevelGenesANDFlatPatternGenes_for_deseq_branch function]: ".$inputFileForBackgroundFiltering." does not exist\n";
@@ -2374,6 +2415,181 @@ sub removeBackgroundLevelGenesANDFlatPatternGenes_for_deseq_branch{
 	close(LOGFILEOUT);
 
 }
+
+
+
+########## Performs DESeq2 differential expression for genes not removed by background and flat pattern filters
+sub only_DESeq2{
+    	my($perl5lib,$comparisons,$deseqParams,$extraPathsRequired,$htseqcountPath,$htseqCountPythonpath,$htseqcountParams,$samtoolsPath,$samples,$GTF,$maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep,
+	$workspace,$experimentName,$logfh,$executionCreatedTempDir,$queueSystem,$queueName,$multicore,$queueSGEProject)=@_;
+
+	my $multiCFlag = queue::multicoreFlag($queueSystem, $multicore); # for us '-pe' => qsub -pe multicore 4 -P Experiment -q ngs
+	my $wait=""; #empty=don't wait
+
+	if(-e $executionCreatedTempDir."/htseqCountIsWaiting"){
+		$wait = queue::waitPidsQUEUE($executionCreatedTempDir."/htseqCountIsWaiting",$queueSystem);	
+	}
+	
+	# <----------------- only for testing ----------------------->	 
+#	use Data::Dumper;
+#	print STDERR "FILE:\n".Dumper($comparisons)."\n";
+	
+
+	# <----------------- htseq-count ----------------------->
+	
+	my $alignmentsDir=$workspace."alignments/";
+	my $htseqcountOutDir=$workspace."htseqCount/";
+	my $deseqOutDir=$workspace."deseq/";
+	
+	
+	if(-d $alignmentsDir){				
+		my $ALLsamples="";
+		my $libraryType="";		
+		
+		foreach my $key (keys %$samples){
+			#sample names
+			$ALLsamples.=${\$key}.",";
+			#library type
+			$libraryType.=$samples->{$key}{libraryType}[0].",";
+		}
+		
+		$ALLsamples=~ s/,$//;
+		$libraryType=~ s/,$//;		
+		
+		
+		my $listWithAllSamples="";
+		my $allComparisonLables="all_1,all_2";
+		my $samplesIncludedIn_listWithAllSamples="";
+		
+		foreach my $comparison (keys %$comparisons){
+			my $deseqComparisonLabels="";
+			my $deseqInputFiles="";				
+			my $comparisonName=${\$comparison};
+
+			#print @$comparisons."\n";
+			my $conditions=$comparisons->{$comparison}->{condition};		
+
+			my $rememberOneLibraryName="";
+			
+			my $i=1;
+			
+			#finds out the number of conditions
+			my @howManyConditions=keys %$conditions; 
+			#while it hasn't checked all the conditions
+			while($i<=@howManyConditions){
+				foreach my $condition(sort keys %$conditions){
+					#condition name					
+					#print "cond: ".${\$condition}."\n";
+
+
+					my $cuffdiffPosition=$conditions->{$condition}->{cuffdiffPosition};					
+					#print $cuffdiffPosition."\n";
+
+					if($cuffdiffPosition==$i){ #includes this condition in the proper order
+						$deseqComparisonLabels.=${\$condition}.","; #condition name
+						my $libraries=$conditions->{$condition}->{libraryName};						
+
+						foreach my $library(@$libraries){
+							$deseqInputFiles.=$htseqcountOutDir.$library.".xls,"; #library (replicate)
+							$rememberOneLibraryName=$library;
+							
+							if($samplesIncludedIn_listWithAllSamples!~ /=$library=/){
+								$listWithAllSamples.=$htseqcountOutDir.$library.".xls,"; #library (replicate)
+								$samplesIncludedIn_listWithAllSamples.="=".$library."=";								
+							}
+						}
+
+						#moves to the next sample: deletes last "," and inserts an extra ':' character
+						#to separate files from different samples
+						$deseqInputFiles=~ s/\,$//;
+						$deseqInputFiles.=":";
+						
+						#for adding ':' only once, to force two (artificial) groups,
+						#no matter what groups they are						
+						if($listWithAllSamples!~ /\:/){
+							$listWithAllSamples=~ s/\,$//;
+							$listWithAllSamples.=":";
+						}
+
+						$i++;
+					}
+				}
+			}
+
+			$deseqComparisonLabels=~ s/\,$//;
+			$deseqInputFiles=~ s/\,$//;
+			$deseqInputFiles=~ s/\:$//;
+						
+			
+			my $nThreads=$deseqParams->[0]->{nThreads};
+			my $alpha=$deseqParams->[0]->{alpha};
+			my $pAdjustMethod=$deseqParams->[0]->{pAdjustMethod};			
+			
+			#executes each comparison in each iteration
+			print STDOUT "[DOING] differential expression with DESeq2\n";
+			my $command="perl ".$Bin."deseq_for_background_and_flattern_remaining_genes.pl";
+			$command.=" --nThreads ".$nThreads;
+			$command.=" --GTF ".$GTF;			
+			$command.=" --alpha ".$alpha;
+			$command.=" --pAdjustMethod ".$pAdjustMethod;
+			$command.=" --deseqOutDir ".$deseqOutDir;
+			$command.=" --comparisonName ".$comparisonName;
+			$command.=" --deseqInputFiles ".$deseqInputFiles;
+			$command.=" --deseqComparisonLabels ".$deseqComparisonLabels; #uses values form cuffdiff
+			$command.=" --extraPathsRequired ".$extraPathsRequired;
+			$command.=" --tmpDir ".$executionCreatedTempDir;
+			$command.=" >> ".$workspace."deseq.log 2>&1";
+			
+			print $logfh (Miscellaneous->getCurrentDateAndTime()).$command."\n";
+
+			queue::executeScript($queueSystem,$queueName,$queueSGEProject,"deseq2".substr($experimentName,0,5),
+			$workspace.$experimentName."_error",$workspace.$experimentName."_error",">".$executionCreatedTempDir."/NOTHING",$command,$wait,$multiCFlag);
+
+			
+		}#foreach my $comparison (keys %$comparisons)
+		
+		$listWithAllSamples=~ s/\,$//;
+		
+		#executes DESeq2 once more with all the samples together
+		my $nThreads=$deseqParams->[0]->{nThreads};
+		my $alpha=$deseqParams->[0]->{alpha};
+		my $pAdjustMethod=$deseqParams->[0]->{pAdjustMethod};		
+		my $command="perl ".$Bin."deseq_for_background_and_flattern_remaining_genes.pl";
+		$command.=" --nThreads ".$nThreads;
+		$command.=" --GTF ".$GTF;			
+		$command.=" --alpha ".$alpha;
+		$command.=" --pAdjustMethod ".$pAdjustMethod;
+		$command.=" --deseqOutDir ".$deseqOutDir;
+		$command.=" --comparisonName ALLsamples";
+		$command.=" --deseqInputFiles ".$listWithAllSamples;
+		$command.=" --deseqComparisonLabels ".$allComparisonLables;
+		$command.=" --extraPathsRequired ".$extraPathsRequired;
+		$command.=" --tmpDir ".$executionCreatedTempDir;
+		$command.=" >> ".$workspace."deseq.log 2>&1";	
+			
+		print $logfh (Miscellaneous->getCurrentDateAndTime()).$command."\n";
+
+		queue::executeScript($queueSystem,$queueName,$queueSGEProject,"deseq2".substr($experimentName,0,5),
+		$workspace.$experimentName."_error",$workspace.$experimentName."_error",">".$executionCreatedTempDir."/NOTHING",$command,$wait,$multiCFlag);
+
+		#deletes differential expression files for ALL samples as it makes no sense (as more than two conditions could be included)
+		#deletes the associated rnk file
+		$command="rm -f ".$deseqOutDir."ALLsamples.differentialExpression* ".$deseqOutDir."ALLsamples.rnk";
+		system($command);
+		print $logfh (Miscellaneous->getCurrentDateAndTime()).$command."\n";
+	
+	}else{
+		print STDERR "\n[ERROR]: problem with the following directories:\n";
+		if(!-d $alignmentsDir){print STDERR "\n[ERROR]: $alignmentsDir directory does not exist\n";}
+		if(!-d $htseqcountOutDir){print STDERR "\n[ERROR]: $htseqcountOutDir directory does not exist\n";}
+		if(!-d $deseqOutDir){print STDERR "\n[ERROR]: $deseqOutDir directory does not exist\n";}
+		exit(-1);
+	}	
+}
+
+
+
+
 
 
 1;

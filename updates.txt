@@ -1,3 +1,11 @@
+****nextpresso1.9.2.5,jan2020
+
+(1) A modification was done in RNAseq.pl and ExecutionLevels.pm: In this version the filtering of background level genes and flat pattern genes does not perform HTseqcount again.
+It only reruns DESeq2 for the remaining (unfiltered) genes.
+
+
+
+
 ****nextpresso1.9.2.4, mar2019
 
 (1) Introduces 'rlogMatrix' for PCA calculations with DESeq2

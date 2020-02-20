@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- nextpresso v1.9.2.4 -->
+<!-- nextpresso v1.9.2.5 -->
+<!-- compatible with 1.9.2.4 -->
 <!-- compatible with 1.9.2.2 -->
 <configurationParameters maximunNumberOfInstancesAllowedToRunSimultaneouslyInOneParticularStep="4">
 	<extraPathsRequired></extraPathsRequired>
